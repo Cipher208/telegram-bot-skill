@@ -141,3 +141,38 @@ test('normalizeUpdate ignores update kinds the bridge does not handle', () => {
     undefined,
   )
 })
+
+test('reports recovery: onSuccess fires after a failed getUpdates', async () => {
+  // status() surfaces last_poll_error, and it used to be write-only: one
+  // transient outage left the error pinned forever, so a healthy bridge
+  // reported itself as broken. The poller must signal recovery, not just
+  // failure.
+  const fake = new FakeBotApi()
+  await fake.start()
+  try {
+    const api = new TelegramApi(fake.token, { baseUrl: fake.baseUrl })
+    fake.respondOnceWith('getUpdates', {
+      status: 502,
+      body: { ok: false, error_code: 502, description: 'Bad Gateway' },
+    })
+    const events: string[] = []
+    fake.pushTextMessage({ chatId: 7, userId: 42, text: 'after recovery' })
+    const iterator = pollUpdates(api, {
+      pollTimeoutSeconds: 30,
+      onError: () => {
+        events.push('error')
+      },
+      onSuccess: () => {
+        events.push('success')
+      },
+      errorDelayMs: 5,
+      sleep: async () => {},
+    })
+    const { value } = await iterator.next()
+    assert.equal(value!.message!.text, 'after recovery')
+    assert.deepEqual(events, ['error', 'success'])
+    await iterator.return()
+  } finally {
+    await fake.stop()
+  }
+})

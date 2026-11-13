@@ -38,10 +38,17 @@ export class FakeBotApi {
   }
 
   async stop(): Promise<void> {
+    const server = this.#server
+    if (server === undefined) return
+    this.#server = undefined
     for (const wake of this.#waiters.splice(0)) wake()
-    this.#server?.closeAllConnections()
+    server.closeAllConnections()
+    // Bun 1.4 closes the listener from closeAllConnections(), so a plain
+    // close() then throws ERR_SERVER_NOT_RUNNING and every test fails in its
+    // own finally block. Stop is a teardown: it must be idempotent.
+    if (!server.listening) return
     await new Promise<void>((resolve, reject) => {
-      this.#server?.close((error) => (error ? reject(error) : resolve()))
+      server.close((error) => (error ? reject(error) : resolve()))
     })
   }
 

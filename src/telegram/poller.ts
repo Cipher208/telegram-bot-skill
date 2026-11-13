@@ -10,6 +10,10 @@ export interface PollerOptions {
   // so a crash never re-delivers what was already consumed.
   saveOffset?: (offset: number) => void | Promise<void>
   onError?: (error: unknown) => void
+  // Called after a getUpdates that came back clean. Without it a single
+  // transient outage pinned `last_poll_error` forever, so a healthy bridge
+  // reported itself as broken.
+  onSuccess?: () => void
   // Backoff after a failed getUpdates before polling again.
   errorDelayMs?: number
   sleep?: Sleep
@@ -41,6 +45,7 @@ export async function* pollUpdates(
       await sleep(options.errorDelayMs ?? 1000)
       continue
     }
+    options.onSuccess?.()
     for (const update of updates) {
       offset = update.update_id + 1
       await options.saveOffset?.(offset)

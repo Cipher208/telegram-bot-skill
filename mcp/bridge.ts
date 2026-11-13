@@ -82,6 +82,14 @@ export class TelegramBridge {
           this.#lastPollError = String(error)
           this.#log(`poll error: ${String(error)}`)
         },
+        onSuccess: () => {
+          // Recovery must be observable, or status() keeps reporting an outage
+          // that ended hours ago.
+          if (this.#lastPollError !== undefined) {
+            this.#lastPollError = undefined
+            this.#log('poll recovered')
+          }
+        },
       },
     })
   }
